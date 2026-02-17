@@ -1,0 +1,41 @@
+name: Monitor Ceny Lotu
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'   # co 30 minut
+  workflow_dispatch:           # ręczne uruchomienie z GitHub UI
+
+jobs:
+  check-price:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write          # potrzebne do git push (zapis last_price.txt)
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          pip install playwright requests
+          playwright install chromium
+          playwright install-deps chromium
+
+      - name: Run monitor
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python flight_monitor.py
+
+      - name: Zapisz cenę do repo
+        run: |
+          git config user.name  "flight-monitor-bot"
+          git config user.email "bot@github-actions"
+          git add last_price.txt
+          git diff --cached --quiet || git commit -m "update: last_price $(date +'%H:%M %d.%m.%Y')"
+          git push
