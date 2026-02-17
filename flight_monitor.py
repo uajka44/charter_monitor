@@ -16,13 +16,13 @@ TELEGRAM_CHAT_ID   = os.environ["TELEGRAM_CHAT_ID"]
 
 URL = (
     "https://biletyczarterowe.r.pl/destynacja"
-    "?data=2026-02-22"
+    "?data=2026-02-20"
     "&dokad%5B%5D=PQC"
-    "&idPrzylot=243424_382518"
-    "&idWylot=382537"
+    "&idPrzylot=243559_382561"
+    "&idWylot=382585"
     "&oneWay=false"
-    "&pakietIdPrzylot=243424_382518"
-    "&pakietIdWylot=243424_382537"
+    "&pakietIdPrzylot=243559_382561"
+    "&pakietIdWylot=243559_382585"
     "&przylotDo&przylotOd"
     "&wiek%5B%5D=1989-10-30"
     "&wylotDo&wylotOd"
@@ -58,21 +58,27 @@ def scrape_price() -> str | None:
         try:
             log.info("Ładuję stronę...")
             page.goto(URL, timeout=60_000, wait_until="networkidle")
-            page.wait_for_timeout(3000)
+            page.wait_for_timeout(4000)  # czekamy na JS
 
-            body = page.inner_text("body")
+            # Celujemy w konkretny element ceny
+            el = page.query_selector("strong[data-v-38925441]")
+            if el:
+                price = el.inner_text().strip()
+                log.info(f"Znaleziono cenę: {price}")
+                return price
 
-            matches = re.findall(r"\d[\d\s]{1,7}(?:,\d{2})?\s*(?:zł|PLN)", body)
-            for m in matches:
-                digits = re.sub(r"\D", "", m)
-                if len(digits) >= 3:
-                    price = m.strip()
-                    log.info(f"Znaleziono cenę: {price}")
-                    return price
+            # Fallback — jeśli atrybut się zmienił, szukamy po wzorcu
+            log.warning("Główny selektor nie znalazł ceny, próbuję fallback...")
+            elements = page.query_selector_all("strong")
+            for el in elements:
+                text = el.inner_text().strip()
+                if re.search(r"\d[\d\s]*zł", text) and len(text) < 20:
+                    log.info(f"Fallback - znaleziono cenę: {text}")
+                    return text
 
             log.warning("Nie znaleziono ceny.")
-            log.debug(f"Fragment body: {body[:500]}")
             return None
+
         except Exception as e:
             log.error(f"Błąd scrapowania: {e}")
             return None
