@@ -57,7 +57,15 @@ def parse_flight_page(url: str) -> dict | None:
         try:
             log.info(f"Ładuję stronę: {url[:60]}...")
             page.goto(url, timeout=60_000, wait_until="networkidle")
-            page.wait_for_timeout(4000)
+            
+            # Czekamy na button "Wybieram" zanim zaczniemy szukać
+            try:
+                page.wait_for_selector("a.kupuje-button", timeout=10_000)
+                log.info("Button 'Wybieram' załadowany.")
+            except Exception:
+                log.warning("Timeout na button - próbuję dalej...")
+            
+            page.wait_for_timeout(3000)  # dodatkowe 3s na pewno
 
             # Destination
             destination_el = page.query_selector("h1.breadcrumbs__header-title")
@@ -65,27 +73,33 @@ def parse_flight_page(url: str) -> dict | None:
 
             # Cena z buttona "Wybieram za X zł"
             price = None
-            buttons = page.query_selector_all("a.button, a.kupuje-button")
-            for btn in buttons:
+            buttons = page.query_selector_all("a.kupuje-button")
+            
+            log.info(f"Znaleziono {len(buttons)} buttonów 'kupuje-button'")
+            
+            for idx, btn in enumerate(buttons):
                 text = btn.inner_text().strip()
-                # Szukamy "Wybieram za 3500 zł"
-                match = re.search(r'Wybieram za ([\d\s]+zł)', text)
+                log.info(f"  Button #{idx+1}: '{text}'")
+                
+                # Regex na "Wybieram za 2900 zł" lub "Wybieram za 2 900 zł"
+                match = re.search(r'Wybieram za ([\d\s]+zł)', text, re.IGNORECASE)
                 if match:
                     price = match.group(1).strip()
+                    log.info(f"✓ Znaleziono cenę w buttonie: {price}")
                     break
 
             if not price:
-                log.warning("Nie znaleziono ceny w buttonie, próbuję fallback...")
+                log.warning("Nie znaleziono ceny w buttonach 'Wybieram', próbuję fallback...")
                 # Fallback - szukamy w strong
                 el = page.query_selector("strong[data-v-38925441]")
                 if el:
                     price = el.inner_text().strip()
+                    log.info(f"Fallback - cena z strong: {price}")
 
             if not price:
-                log.warning("Nie znaleziono ceny na stronie.")
+                log.error("Nie znaleziono ceny na stronie!")
                 return None
 
-            log.info(f"Wyciągnięto: {destination}, {price}")
             return {
                 "destination": destination,
                 "price": price
