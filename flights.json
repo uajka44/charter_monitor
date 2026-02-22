@@ -1,0 +1,38 @@
+[
+  {
+    "active": false,
+    "url": "https://biletycharterowe.r.pl/destynacja?data=2026-02-20&dokad%5B%5D=PQC&idPrzylot=243559_382561&idWylot=382585&oneWay=false&pakietIdPrzylot=243559_382561&pakietIdWylot=243559_382585&przylotDo&przylotOd&wiek%5B%5D=1989-10-30&wylotDo&wylotOd#ZGF0YT0maWRXeWxvdD0zODI2NDcmb25lV2F5PWZhbHNlJnBha2lldElkV3lsb3Q9MjQzNDgyXzM4MjY0NyZwcnp5bG90RG8mcHJ6eWxvdE9kJndpZWslNUIlNUQ9MTk4OS0xMC0zMCZ3eWxvdERvJnd5bG90T2Q="
+  },
+  {
+    "active": false,
+    "url": "https://biletycharterowe.r.pl/destynacja?data=2026-03-01&dokad%5B%5D=CUN&idPrzylot=247774_382419&idWylot=382444&oneWay=false&pakietIdPrzylot=247774_382419&pakietIdWylot=247774_382444&przylotDo&przylotOd&wiek%5B%5D=1989-10-30&wylotDo&wylotOd"
+  },
+  {
+    "active": true,
+    "url": "https://biletyczarterowe.r.pl/destynacja?data=2026-02-26&dokad%5B%5D=CUN&idPrzylot=247737_382379&idWylot=382398&oneWay=false&pakietIdPrzylot=247737_382379&pakietIdWylot=247737_382398&przylotDo&przylotOd&wiek%5B%5D=1989-10-30&wylotDo&wylotOd"
+  },
+  {
+    "active": true,
+    "url": "https://biletyczarterowe.r.pl/destynacja?data=2026-03-01&dokad%5B%5D=CUN&idPrzylot=247774_382419&idWylot=382444&oneWay=false&pakietIdPrzylot=247774_382419&pakietIdWylot=247774_382444&przylotDo&przylotOd&wiek%5B%5D=1989-10-30&wylotDo&wylotOd"
+  },
+  {
+    "active": true,
+    "url": "https://biletyczarterowe.r.pl/destynacja?data=2026-02-28&dokad%5B%5D=BKK&idPrzylot=244679_381751&idWylot=381770&oneWay=false&pakietIdPrzylot=244679_381751&pakietIdWylot=244679_381770&przylotDo&przylotOd&wiek%5B%5D=1989-10-30&wylotDo&wylotOd"
+  },
+  {
+    "active": true,
+    "url": "https://biletyczarterowe.r.pl/destynacja?data=2026-02-27&dokad%5B%5D=PQC&idPrzylot=243562_382561&idWylot=382586&oneWay=false&pakietIdPrzylot=243562_382561&pakietIdWylot=243562_382586&przylotDo&przylotOd&wiek%5B%5D=1989-10-30&wylotDo&wylotOd"
+  },
+    {
+    "active": true,
+    "url": "https://biletyczarterowe.r.pl/destynacja?data=2026-03-01&dokad%5B%5D=PQC&idPrzylot=243428_382519&idWylot=382538&oneWay=false&pakietIdPrzylot=243428_382519&pakietIdWylot=243428_382538&przylotDo&przylotOd&wiek%5B%5D=1989-10-30&wylotDo&wylotOd"
+  }
+//    {
+//    "active": true,
+//    "url": ""
+//  }
+//  {
+//    "active": true,
+//    "url": ""
+//  }
+]

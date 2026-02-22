@@ -1,46 +1,81 @@
-# Flight Monitor – Monitor Ceny Lotu ✈️
+# Flight Monitor – Monitor Cen Lotów ✈️
 
-Sprawdza cenę lotu do PQC co 30 minut. Powiadomienia przez Telegram.
-Ostatnia cena zapisywana w `last_price.txt` w repo – zero zewnętrznych serwisów.
+Automatyczny monitor cen lotów czarterowych. Sprawdza co 30 minut, wysyła alerty przez Telegram.
+
+## Jak to działa
+
+1. Edytujesz plik **`flights.json`** — dodajesz URL lotu i ustawiasz `active: true`
+2. Skrypt sam wyciąga ze strony:
+   - Nazwę miejsca (Cancun, Phu Quoc, etc.)
+   - Datę wylotu i powrotu
+   - Cenę z buttona "Wybieram za X zł"
+3. Zapisuje ostatnią cenę w folderze `prices/`
+4. Gdy cena się zmieni → alert na Telegram 🚨
 
 ## Setup (jednorazowo)
 
-### 1. Utwórz repo na GitHub
-Nowe repo: `flight-monitor` (może być prywatne)
-
-### 2. Dodaj GitHub Secrets
+### 1. GitHub Secrets
 **Settings → Secrets and variables → Actions → New repository secret**
 
 | Nazwa | Wartość |
 |-------|---------|
 | `TELEGRAM_BOT_TOKEN` | token od BotFather |
-| `TELEGRAM_CHAT_ID` | `422204159` |
+| `TELEGRAM_CHAT_ID` | twoje chat_id |
 
-### 3. Wgraj pliki na GitHub
-```bash
-cd C:\Users\anasy\Github\flight-monitor
-git init
-git add .
-git commit -m "init"
-git remote add origin https://github.com/TWOJ_LOGIN/flight-monitor.git
-git push -u origin main
+### 2. Edytuj `flights.json`
+Dodaj swoje loty:
+
+```json
+[
+  {
+    "active": true,
+    "url": "https://biletycharterowe.r.pl/destynacja?data=2026-02-26&dokad%5B%5D=CUN&..."
+  },
+  {
+    "active": false,
+    "url": "https://..."
+  }
+]
 ```
 
-### 4. Pierwsze uruchomienie
-Ręcznie: **Actions → Monitor Ceny Lotu → Run workflow**
+### 3. Commit i Push
+```bash
+git add .
+git commit -m "update flights"
+git push
+```
 
-## Jak to działa
-- Co 30 minut GitHub odpala skrypt
-- Skrypt ładuje stronę przez Playwright (headless Chrome)
-- Porównuje cenę z `last_price.txt`
-- Jeśli zmiana → wysyła alert Telegram 🚨
-- Zapisuje nową cenę do `last_price.txt` (git commit do repo)
+## Zarządzanie lotami
+
+### Dodanie nowego lotu
+1. Skopiuj URL ze strony biletyczarterowe.r.pl
+2. Edytuj `flights.json` (możesz na GitHubie lub lokalnie)
+3. Dodaj blok:
+```json
+{
+  "active": true,
+  "url": "WKLEJ_URL_TUTAJ"
+}
+```
+4. Zapisz, commit, push
+
+### Wyłączenie lotu
+Zmień `"active": true` na `"active": false`
+
+### Usunięcie lotu
+Usuń cały blok `{}` z pliku JSON
 
 ## Struktura
 ```
 flight-monitor/
 ├── .github/workflows/monitor.yml   ← harmonogram
+├── flights.json                    ← twoje loty (edytujesz TEN plik)
 ├── flight_monitor.py               ← skrypt
-├── last_price.txt                  ← aktualna cena (auto-aktualizowana)
+├── prices/                         ← ostatnie ceny (auto)
 └── README.md
 ```
+
+## Test
+**Actions → Monitor Ceny Lotu → Run workflow**
+
+Dostaniesz wiadomość dla każdego aktywnego lotu.

@@ -1,57 +1,22 @@
 """
 Monitor cen lotów – GitHub Actions
-Monitoruje wiele lotów jednocześnie, każdy zapisany w osobnym pliku.
+Pobiera dane z flights.json, automatycznie wyciąga szczegóły lotu z HTML.
 """
 
 import os
 import re
+import json
+import hashlib
 import logging
 from datetime import datetime
 from playwright.sync_api import sync_playwright
 import requests
 
-# ── Konfiguracja (GitHub Secrets) ───────────────────────────────────────────
+# ── Konfiguracja ────────────────────────────────────────────────────────────
 TELEGRAM_BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 TELEGRAM_CHAT_ID   = os.environ["TELEGRAM_CHAT_ID"]
-
-# Lista lotów do monitorowania
-FLIGHTS = [
-    {
-        "name": "PQC (Phu Quoc)",
-        "url": (
-            "https://biletyczarterowe.r.pl/destynacja"
-            "?data=2026-02-20"
-            "&dokad%5B%5D=PQC"
-            "&idPrzylot=243559_382561"
-            "&idWylot=382585"
-            "&oneWay=false"
-            "&pakietIdPrzylot=243559_382561"
-            "&pakietIdWylot=243559_382585"
-            "&przylotDo&przylotOd"
-            "&wiek%5B%5D=1989-10-30"
-            "&wylotDo&wylotOd"
-            "#ZGF0YT0maWRXeWxvdD0zODI2NDcmb25lV2F5PWZhbHNlJnBha2lldElkV3lsb3Q9MjQzNDgyXzM4MjY0NyZwcnp5bG90RG8mcHJ6eWxvdE9kJndpZWslNUIlNUQ9MTk4OS0xMC0zMCZ3eWxvdERvJnd5bG90T2Q="
-        ),
-        "price_file": "last_price_pqc.txt"
-    },
-    {
-        "name": "CUN (Cancun)",
-        "url": (
-            "https://biletyczarterowe.r.pl/destynacja"
-            "?data=2026-03-01"
-            "&dokad%5B%5D=CUN"
-            "&idPrzylot=247774_382419"
-            "&idWylot=382444"
-            "&oneWay=false"
-            "&pakietIdPrzylot=247774_382419"
-            "&pakietIdWylot=247774_382444"
-            "&przylotDo&przylotOd"
-            "&wiek%5B%5D=1989-10-30"
-            "&wylotDo&wylotOd"
-        ),
-        "price_file": "last_price_cun.txt"
-    }
-]
+FLIGHTS_FILE       = "flights.json"
+PRICE_DIR          = "prices"
 # ────────────────────────────────────────────────────────────────────────────
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s  %(message)s")
@@ -59,6 +24,7 @@ log = logging.getLogger(__name__)
 
 
 def send_telegram(message: str):
+    """Wyślij wiadomość przez Telegram."""
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     r = requests.post(url, json={
         "chat_id": TELEGRAM_CHAT_ID,
@@ -69,7 +35,14 @@ def send_telegram(message: str):
     log.info("Telegram: wysłano.")
 
 
-def scrape_price(url: str) -> str | None:
+def parse_flight_page(url: str) -> dict | None:
+    """
+    Otwórz stronę i wyciągnij:
+    - destination (z h1.breadcrumbs__header-title)
+    - departure (pierwszy div.termin__header)
+    - return_date (drugi div.termin__header)
+    - price (z buttona "Wybieram za X zł")
+    """
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         page = browser.new_page(user_agent=(
@@ -82,88 +55,138 @@ def scrape_price(url: str) -> str | None:
             page.goto(url, timeout=60_000, wait_until="networkidle")
             page.wait_for_timeout(4000)
 
-            # Główny selektor
-            el = page.query_selector("strong[data-v-38925441]")
-            if el:
-                price = el.inner_text().strip()
-                log.info(f"Znaleziono cenę: {price}")
-                return price
+            # Destination
+            destination_el = page.query_selector("h1.breadcrumbs__header-title")
+            destination = destination_el.inner_text().strip() if destination_el else "Nieznane"
 
-            # Fallback
-            log.warning("Główny selektor nie znalazł ceny, próbuję fallback...")
-            elements = page.query_selector_all("strong")
-            for el in elements:
-                text = el.inner_text().strip()
-                if re.search(r"\d[\d\s]*zł", text) and len(text) < 20:
-                    log.info(f"Fallback - znaleziono: {text}")
-                    return text
+            # Daty wylotu i powrotu
+            date_elements = page.query_selector_all("div.termin__header")
+            departure = date_elements[0].inner_text().strip() if len(date_elements) > 0 else "?"
+            return_date = date_elements[1].inner_text().strip() if len(date_elements) > 1 else "?"
 
-            log.warning("Nie znaleziono ceny.")
-            return None
+            # Cena z buttona "Wybieram za X zł"
+            price = None
+            buttons = page.query_selector_all("a.button, a.kupuje-button")
+            for btn in buttons:
+                text = btn.inner_text().strip()
+                match = re.search(r"([\d\s]+zł)", text)
+                if match:
+                    price = match.group(1).strip()
+                    break
+
+            if not price:
+                # Fallback - szukamy w strong[data-v-...]
+                el = page.query_selector("strong[data-v-38925441]")
+                if el:
+                    price = el.inner_text().strip()
+
+            if not price:
+                log.warning("Nie znaleziono ceny na stronie.")
+                return None
+
+            log.info(f"Wyciągnięto: {destination}, {departure} → {return_date}, {price}")
+            return {
+                "destination": destination,
+                "departure": departure,
+                "return_date": return_date,
+                "price": price
+            }
 
         except Exception as e:
-            log.error(f"Błąd scrapowania: {e}")
+            log.error(f"Błąd parsowania: {e}")
             return None
         finally:
             browser.close()
 
 
-def load_last_price(filepath: str) -> str | None:
+def get_flight_id(url: str) -> str:
+    """Generuj unikalny ID lotu z URL (hash)."""
+    return hashlib.md5(url.encode()).hexdigest()[:12]
+
+
+def load_last_price(flight_id: str) -> str | None:
+    """Wczytaj ostatnią cenę dla danego lotu."""
+    filepath = os.path.join(PRICE_DIR, f"{flight_id}.txt")
     if os.path.exists(filepath):
         return open(filepath, encoding="utf-8").read().strip() or None
     return None
 
 
-def save_price(filepath: str, price: str):
+def save_price(flight_id: str, price: str):
+    """Zapisz cenę dla danego lotu."""
+    os.makedirs(PRICE_DIR, exist_ok=True)
+    filepath = os.path.join(PRICE_DIR, f"{flight_id}.txt")
     with open(filepath, "w", encoding="utf-8") as f:
         f.write(price)
 
 
-def check_flight(flight: dict):
+def check_flight(url: str):
     """Sprawdź jeden lot i wyślij powiadomienie jeśli cena się zmieniła."""
-    name = flight["name"]
-    url = flight["url"]
-    price_file = flight["price_file"]
+    flight_id = get_flight_id(url)
+    log.info(f"=== Sprawdzam lot (ID: {flight_id}) ===")
     
-    log.info(f"=== Sprawdzam lot: {name} ===")
-    now = datetime.now().strftime("%H:%M %d.%m.%Y")
-    
-    current_price = scrape_price(url)
-
-    if current_price is None:
-        log.warning(f"{name}: Nie udało się pobrać ceny.")
-        send_telegram(f"⚠️ Nie udało się pobrać ceny lotu <b>{name}</b> o {now}.")
+    data = parse_flight_page(url)
+    if not data:
+        send_telegram(f"⚠️ Nie udało się pobrać danych dla lotu:\n{url[:80]}")
         return
 
-    last_price = load_last_price(price_file)
-    log.info(f"{name}: Aktualna: {current_price} | Poprzednia: {last_price}")
+    destination = data["destination"]
+    departure = data["departure"]
+    return_date = data["return_date"]
+    current_price = data["price"]
+    now = datetime.now().strftime("%H:%M %d.%m.%Y")
+
+    last_price = load_last_price(flight_id)
+    log.info(f"{destination}: Aktualna: {current_price} | Poprzednia: {last_price}")
 
     if last_price is None:
-        save_price(price_file, current_price)
+        # Pierwsze sprawdzenie
+        save_price(flight_id, current_price)
         send_telegram(
-            f"✈️ <b>Monitor lotu {name}</b>\n"
-            f"💰 Cena startowa: <b>{current_price}</b>\n"
+            f"✈️ <b>Nowy lot w monitoringu</b>\n"
+            f"📍 {destination}\n"
+            f"📅 {departure} → {return_date}\n"
+            f"💰 Cena: <b>{current_price}</b>\n"
             f"🕐 {now}"
         )
     elif current_price != last_price:
-        save_price(price_file, current_price)
+        # Zmiana ceny!
+        save_price(flight_id, current_price)
         send_telegram(
             f"🚨 <b>ZMIANA CENY!</b>\n"
-            f"✈️ Lot: <b>{name}</b>\n"
+            f"✈️ {destination}\n"
+            f"📅 {departure} → {return_date}\n"
             f"📌 Poprzednia: <s>{last_price}</s>\n"
             f"💰 Aktualna:  <b>{current_price}</b>\n"
             f"🕐 {now}\n"
-            f'🔗 <a href="{url[:80]}">Sprawdź ofertę</a>'
+            f'🔗 <a href="{url[:100]}">Sprawdź ofertę</a>'
         )
     else:
-        log.info(f"{name}: Cena bez zmian – cicho.")
+        log.info(f"{destination}: Cena bez zmian – cicho.")
 
 
 def main():
     log.info("=== Start monitora lotów ===")
-    for flight in FLIGHTS:
-        check_flight(flight)
-        log.info("")  # pusta linia między lotami
+    
+    # Wczytaj flights.json
+    if not os.path.exists(FLIGHTS_FILE):
+        log.error(f"Brak pliku {FLIGHTS_FILE}!")
+        send_telegram(f"⚠️ Błąd: brak pliku {FLIGHTS_FILE}")
+        return
+
+    with open(FLIGHTS_FILE, encoding="utf-8") as f:
+        flights = json.load(f)
+
+    active_flights = [f for f in flights if f.get("active", False)]
+    log.info(f"Znaleziono {len(active_flights)} aktywnych lotów.")
+
+    for flight in active_flights:
+        url = flight.get("url")
+        if not url:
+            log.warning("Lot bez URL - pomijam.")
+            continue
+        check_flight(url)
+        log.info("")
 
 
 if __name__ == "__main__":
