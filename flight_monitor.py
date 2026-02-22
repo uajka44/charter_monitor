@@ -1,6 +1,6 @@
 """
 Monitor cen lotów – GitHub Actions
-Pobiera dane z flights.json, automatycznie wyciąga szczegóły lotu z HTML.
+Pobiera dane z flights.json, automatycznie wyciąga szczegóły lotu.
 """
 
 import os
@@ -35,12 +35,16 @@ def send_telegram(message: str):
     log.info("Telegram: wysłano.")
 
 
+def extract_date_from_url(url: str) -> str:
+    """Wyciągnij datę wylotu z parametru URL data=YYYY-MM-DD."""
+    match = re.search(r'data=(\d{4}-\d{2}-\d{2})', url)
+    return match.group(1) if match else "Brak daty"
+
+
 def parse_flight_page(url: str) -> dict | None:
     """
     Otwórz stronę i wyciągnij:
     - destination (z h1.breadcrumbs__header-title)
-    - departure (pierwszy div.termin__header)
-    - return_date (drugi div.termin__header)
     - price (z buttona "Wybieram za X zł")
     """
     with sync_playwright() as p:
@@ -59,23 +63,20 @@ def parse_flight_page(url: str) -> dict | None:
             destination_el = page.query_selector("h1.breadcrumbs__header-title")
             destination = destination_el.inner_text().strip() if destination_el else "Nieznane"
 
-            # Daty wylotu i powrotu
-            date_elements = page.query_selector_all("div.termin__header")
-            departure = date_elements[0].inner_text().strip() if len(date_elements) > 0 else "?"
-            return_date = date_elements[1].inner_text().strip() if len(date_elements) > 1 else "?"
-
             # Cena z buttona "Wybieram za X zł"
             price = None
             buttons = page.query_selector_all("a.button, a.kupuje-button")
             for btn in buttons:
                 text = btn.inner_text().strip()
-                match = re.search(r"([\d\s]+zł)", text)
+                # Szukamy "Wybieram za 3500 zł"
+                match = re.search(r'Wybieram za ([\d\s]+zł)', text)
                 if match:
                     price = match.group(1).strip()
                     break
 
             if not price:
-                # Fallback - szukamy w strong[data-v-...]
+                log.warning("Nie znaleziono ceny w buttonie, próbuję fallback...")
+                # Fallback - szukamy w strong
                 el = page.query_selector("strong[data-v-38925441]")
                 if el:
                     price = el.inner_text().strip()
@@ -84,11 +85,9 @@ def parse_flight_page(url: str) -> dict | None:
                 log.warning("Nie znaleziono ceny na stronie.")
                 return None
 
-            log.info(f"Wyciągnięto: {destination}, {departure} → {return_date}, {price}")
+            log.info(f"Wyciągnięto: {destination}, {price}")
             return {
                 "destination": destination,
-                "departure": departure,
-                "return_date": return_date,
                 "price": price
             }
 
@@ -125,14 +124,15 @@ def check_flight(url: str):
     flight_id = get_flight_id(url)
     log.info(f"=== Sprawdzam lot (ID: {flight_id}) ===")
     
+    # Data wylotu z URL
+    departure_date = extract_date_from_url(url)
+    
     data = parse_flight_page(url)
     if not data:
         send_telegram(f"⚠️ Nie udało się pobrać danych dla lotu:\n{url[:80]}")
         return
 
     destination = data["destination"]
-    departure = data["departure"]
-    return_date = data["return_date"]
     current_price = data["price"]
     now = datetime.now().strftime("%H:%M %d.%m.%Y")
 
@@ -145,7 +145,7 @@ def check_flight(url: str):
         send_telegram(
             f"✈️ <b>Nowy lot w monitoringu</b>\n"
             f"📍 {destination}\n"
-            f"📅 {departure} → {return_date}\n"
+            f"📅 Wylot: {departure_date}\n"
             f"💰 Cena: <b>{current_price}</b>\n"
             f"🕐 {now}"
         )
@@ -155,7 +155,7 @@ def check_flight(url: str):
         send_telegram(
             f"🚨 <b>ZMIANA CENY!</b>\n"
             f"✈️ {destination}\n"
-            f"📅 {departure} → {return_date}\n"
+            f"📅 Wylot: {departure_date}\n"
             f"📌 Poprzednia: <s>{last_price}</s>\n"
             f"💰 Aktualna:  <b>{current_price}</b>\n"
             f"🕐 {now}\n"
