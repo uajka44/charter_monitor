@@ -1,8 +1,8 @@
 name: Monitor Ceny Lotu
 
 on:
-  schedule:
-    - cron: '*/30 * * * *'   # co 30 minut
+ # schedule:
+ #   - cron: '*/30 * * * *'   # co 30 minut
   workflow_dispatch:           # ręczne uruchomienie z GitHub UI
 
 jobs:
